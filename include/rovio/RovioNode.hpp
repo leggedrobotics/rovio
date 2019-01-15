@@ -44,6 +44,8 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <std_msgs/Header.h>
+#include <std_msgs/Time.h>
 #include <std_srvs/Empty.h>
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
@@ -146,6 +148,7 @@ class RovioNode{
   ros::Publisher pubMarkers_;          /**<Publisher: Ros line marker, indicating the depth uncertainty of a landmark.*/
   ros::Publisher pubExtrinsics_[mtState::nCam_];
   ros::Publisher pubImuBias_;
+  ros::Publisher pubOdometryAnnouncement_;
 
   // Ros Messages
   geometry_msgs::TransformStamped transformMsg_;
@@ -157,6 +160,7 @@ class RovioNode{
   sensor_msgs::PointCloud2 patchMsg_;
   visualization_msgs::Marker markerMsg_;
   sensor_msgs::Imu imuBiasMsg_;
+  std_msgs::Header odometryAnnouncementMsg_;
   int msgSeq_;
 
   // Rovio outputs and coordinate transformations
@@ -229,6 +233,8 @@ class RovioNode{
       pubExtrinsics_[camID] = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("rovio/extrinsics" + std::to_string(camID), 1 );
     }
     pubImuBias_ = nh_.advertise<sensor_msgs::Imu>("rovio/imu_biases", 1 );
+
+    pubOdometryAnnouncement_ = nh_.advertise<std_msgs::Header>("rovio/odometry_announcement", 1 );
 
     // Handle coordinate frame naming
     map_frame_ = "/map";
@@ -328,6 +334,9 @@ class RovioNode{
     markerMsg_.color.r = 0.0;
     markerMsg_.color.g = 1.0;
     markerMsg_.color.b = 0.0;
+
+    // Header message to announce an upcoming odometry 
+    odometryAnnouncementMsg_.frame_id = "";
   }
 
   /** \brief Destructor
@@ -522,6 +531,9 @@ class RovioNode{
       if(imgUpdateMeas_.template get<mtImgMeas::_aux>().areAllValid()){
         mpFilter_->template addUpdateMeas<0>(imgUpdateMeas_,msgTime);
         imgUpdateMeas_.template get<mtImgMeas::_aux>().reset(msgTime);
+        if(camID==0){
+          publishOdometryAnnouncement(img);
+        }
         updateAndPublish();
       }
     }
@@ -626,6 +638,22 @@ class RovioNode{
     init_state_.WrWM_ = WrWM;
     init_state_.qMW_ = qMW;
     init_state_.state_ = FilterInitializationState::State::WaitForInitExternalPose;
+  }
+
+  /** \brief Publishes a header with to announce a future estimate at that time.
+   *  @param img - image associated with the estimate
+   */
+  bool publishOdometryAnnouncement(const sensor_msgs::ImageConstPtr & img){
+    bool success = false;
+    if(pubOdometryAnnouncement_.getNumSubscribers() > 0){
+      if(init_state_.isInitialized()){
+        odometryAnnouncementMsg_.seq = msgSeq_;
+        odometryAnnouncementMsg_.stamp = img->header.stamp;
+        pubOdometryAnnouncement_.publish(odometryAnnouncementMsg_);
+        success = true;
+      }
+    }
+    return success;
   }
 
   /** \brief Executes the update step of the filter and publishes the updated data.
