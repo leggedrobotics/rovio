@@ -247,6 +247,8 @@ class RovioNode{
     nh_private_.param("imu_frame", imu_frame_, imu_frame_);
 
     // Initialize messages
+    estimatedPoseWithCovarianceStampedMsg_.header.frame_id = imu_frame_;
+
     transformMsg_.header.frame_id = world_frame_;
     transformMsg_.child_frame_id = imu_frame_;
 
