@@ -498,16 +498,27 @@ class RovioNode{
    *   @param camID - Camera ID.
    */
   void imgCallback(const sensor_msgs::ImageConstPtr & img, const int camID = 0){
-    // Get image from msg
+    // Get greyscale image from msg
     cv_bridge::CvImagePtr cv_ptr;
-    try {
-      cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::TYPE_8UC1);
-    } catch (cv_bridge::Exception& e) {
-      ROS_ERROR("cv_bridge exception: %s", e.what());
-      return;
-    }
     cv::Mat cv_img;
-    cv_ptr->image.copyTo(cv_img);
+    if(sensor_msgs::image_encodings::isMono(img->encoding)){
+      try {
+        cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::TYPE_8UC1);
+      } catch (cv_bridge::Exception& e) {
+        ROS_ERROR("cv_bridge exception: %s", e.what());
+        return;
+      }
+      cv_ptr->image.copyTo(cv_img);
+    } else{
+      try {
+        cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::BGR8);
+      } catch (cv_bridge::Exception& e) {
+        ROS_ERROR("cv_bridge exception: %s", e.what());
+        return;
+      }
+      cv::cvtColor(cv_ptr->image,cv_img,CV_BGR2GRAY);
+    }
+
     if(init_state_.isInitialized() && !cv_img.empty()){
       double msgTime = img->header.stamp.toSec();
       if(msgTime != imgUpdateMeas_.template get<mtImgMeas::_aux>().imgTime_){
